@@ -1,8 +1,13 @@
-# crypto-xs-perps
+# A machine-learning long-short book on Binance perpetuals, tested on a sealed holdout
 
-A daily cross-sectional long-short book on Binance USDT-margined perpetual futures. Each day two models rank about 100 coins on 32 features built from hourly bars and funding rates, one a ridge regression and the other gradient-boosted trees. The book was developed on January 2021 to June 2022. A holdout from July 2022 to August 2026 stayed sealed until the design was frozen and was then read once.
+Each day the book ranks about 100 coins by two forecasts of their next-week return, one from ridge regression and one from gradient-boosted trees, and trades the extremes in Binance USDT-margined perpetual futures. The 32 inputs come from hourly bars and funding rates and cover order flow, momentum, liquidity, links to BTC and the S&P 500, the perpetual's premium and funding, and short-squeeze proxies. Development used January 2021 to June 2022. A holdout from July 2022 to August 2026 stayed sealed until the design was frozen and was then read once.
 
-The design sample netted 52.45 bps a day after trading cost, with a Newey-West t of 3.91. On the holdout the same book netted 9.30 bps a day with t 1.58, short of the 2.00 hurdle fixed before the read, so the design result is not confirmed out of sample. Forecast skill held up on the holdout, with a mean daily rank IC of 0.088 against 0.062 in design. Gross return fell from 69 to 25 bps a day as cross-sectional dispersion shrank and the book became a net payer of funding.
+The design sample netted 52.45 bps a day after trading cost and funding, with a Newey-West t of 3.91. On the holdout the same book netted 9.30 bps a day with t 1.58, short of the 2.00 hurdle fixed before the read, so the design result is not confirmed out of sample. Forecast skill held up on the holdout, with a mean daily rank IC of 0.088 against 0.062 in design. Gross return fell from 69 to 25 bps a day as cross-sectional dispersion shrank and the book became a net payer of funding.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="figures/equity-dark.png">
+  <img alt="Growth of $1 in the book with its drawdown, design sample then holdout" src="figures/equity.png">
+</picture>
 
 ## Results
 
@@ -25,11 +30,12 @@ The design sample netted 52.45 bps a day after trading cost, with a Newey-West t
 | Correlation with the equal-weight market | -0.17 | -0.46 |
 | $10,000 at the end of the sample | $144,866 | $26,765 |
 
-Returns run from one 00:00 UTC close to the next and include every funding settlement in between. Gross and net figures both include funding. The bootstrap uses circular blocks of 10 days.
+Returns run from one 00:00 UTC close to the next and include every funding settlement in between, so gross and net figures both carry funding. The bootstrap resamples circular blocks of 10 days. Every number in this README is read from `output/summary.json`, which `python pipeline.py report` writes.
 
-![Growth of the book and drawdown](figures/equity.png)
-
-![Return and forecast skill by period](figures/by_period.png)
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="figures/by_period-dark.png">
+  <img alt="Return, t statistic, rank IC and dispersion by period" src="figures/by_period.png">
+</picture>
 
 | Period | Days | Net, bps/day | t | Gross, bps/day | Funding, bps/day | Rank IC | Dispersion |
 |---|---|---|---|---|---|---|---|
@@ -50,13 +56,13 @@ Most of the design return came from the first half of 2021, when dispersion was 
 
 The test was fixed before the read as a one-sided Newey-West t statistic with 10 lags on daily net returns, against a hurdle of 2.00. Development ran 142 trials whose daily returns had a mean pairwise correlation of 0.71. Scaling the expected maximum of 142 standard normals (2.65) by the square root of one minus that correlation gives 1.43, below the conventional floor of 2.0, so the floor governs (Bailey and López de Prado, 2014). Because machine-learning books on the crypto cross-section are already published (Cakici et al., 2024), the power calculation assumed the holdout would keep 42% of the design effect; at that effect, net of the extra basis point of fee, power was 0.73. The non-rejection therefore moves the odds against the design effect by about 3.6 times and stops short of showing the effect is absent.
 
-From the development record, the design-sample deflated Sharpe ratio was 0.985 to 0.999. The probability of backtest overfitting, from 16-block combinatorial splits of 76 captured trial series, ranged from 0.06 to 0.22 across block offsets. An earlier spot-only window (April 2019 to April 2020) gave a deflated Sharpe of 0.66 to 0.70. The trial return matrix behind these figures is not part of this repository.
+From the development record, the design-sample deflated Sharpe ratio was 0.985 to 0.999. The probability of backtest overfitting, from 16-block combinatorial splits of 76 captured trial series, ranged from 0.06 to 0.22 across block offsets. An earlier spot-only window (April 2019 to April 2020) gave a deflated Sharpe of 0.66 to 0.70.
 
 ## Method
 
 ### Universe
 
-Each month the universe holds the 100 Binance spot USDT pairs with the highest quote volume over the trailing 90 days, measured through the end of the previous month. A member stays while it ranks 120th or better and a newcomer enters at 80th or better, which cuts monthly churn by about 60% against a plain 30-day top 100. Stablecoin bases, fiat bases, leveraged tokens and wrapped coins are left out. On a given day a coin enters the panel when it is in the universe with at least 20 hourly spot bars. The panel also requires defined order-flow features, today's return, a 20-day volatility and a next-day spot return. Trading happens in the coin's perpetual, on days when the perpetual has a next-day return and a funding figure.
+Each month the universe holds the 100 Binance spot USDT pairs with the highest quote volume over the trailing 90 days, measured through the end of the previous month. A member stays while it ranks 120th or better and a newcomer enters at 80th or better, which cuts monthly churn by about 60% against a plain 30-day top 100. Stablecoin bases, fiat bases, leveraged tokens and wrapped coins are left out. The Binance archive keeps delisted symbols, so membership is point in time. On a given day a coin enters the panel when it is in the universe with at least 20 hourly spot bars. The panel also requires defined order-flow features, today's return, a 20-day volatility and a next-day spot return. Trading happens in the coin's perpetual, on days when the perpetual has a next-day return and a funding figure.
 
 ### Features
 
@@ -106,15 +112,25 @@ The one-way spread of 12.93 bp starts from a quoted half-spread of 11.0 bp for B
 
 A day's funding is the sum of every settlement after the book forms through the next 00:00 UTC fix, so 8-hour, 4-hour, 1-hour and emergency settlements are all charged. The day counts only when that closing fix exists and the settlements cover 24 hours. Where a coin has a score and funding but no perpetual return that day, its spot return stands in (329 coin-days in design, 61 in the holdout). A perpetual whose bars stop for good exits at its last hourly close with funding settled up to then.
 
-## Data note
+## Limitations
 
-The hourly perpetual files behind the results above lack the 00:00 UTC bar on the first day of each month from January 2022 on. Binance added a header row to those files that month, and the original download read the first data row of each file as the header. The download code in this repository keeps that row. Perpetual returns and `basis` use the 23:00 UTC close and are unaffected. On and after the first of each month the gap touches the inputs built from perpetual volume and imbalance (`flow_gap`, `perp_share`, `cascades_7d`, `perp_flow_lead_3d` and `perp_discount_3d`), so a fresh download will give slightly different features. The holdout was read once and is not re-run on corrected files.
+**Missing perpetual bars in the recorded run.** The hourly perpetual files behind the results above lack the 00:00 UTC bar on the first day of each month from January 2022 on. Binance added a header row to those files that month, and the original download read the first data row of each file as the header. The download code in this repository keeps that row. Perpetual returns and `basis` use the 23:00 UTC close and are unaffected. On and after the first of each month the gap touches the inputs built from perpetual volume and imbalance (`flow_gap`, `perp_share`, `cascades_7d`, `perp_flow_lead_3d` and `perp_discount_3d`), so a fresh download will give slightly different features. The holdout was read once and is not re-run on corrected files.
 
-## Running it
+**Cost is flat across order sizes.** No published depth or size-cost figures for Binance perpetuals were found, so the cost carries no market-impact term. As a rough guide to scale, the 95th-percentile trade in the holdout reaches 1% of the coin's same-day spot volume at an account of about $1.2M.
+
+**Fills at the funding fix.** The book trades at the 00:00 UTC close, which is also the funding settlement time. Slippage between signal and fill is not modeled beyond the 3.1% funding-hour widening built into the spread.
+
+**Funding gaps.** For 1,101 perpetual-months the archive publishes no funding file, nearly all for contracts from mid-2025 on whose funding archive stops while their bars continue. Those coin-days stay outside the tradable set.
+
+**Selection statistics come from outside this repository.** The trial count, trial correlation, deflated Sharpe and overfitting probability were computed on the development runs, whose daily return matrix is not included here.
+
+## Reproduction
 
 Python 3.10 or later. About 2 GB of hourly parquet files come from the public Binance archive at data.binance.vision, which needs no API key. The S&P 500 series comes from Yahoo Finance.
 
 ```bash
+git clone https://github.com/boomer25tiger/crypto-xs-perps.git
+cd crypto-xs-perps
 python -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
 python pipeline.py download    # Binance hourly klines and funding, plus S&P 500 closes
@@ -125,9 +141,9 @@ python pipeline.py report      # design and holdout books, output/summary.json
 python pipeline.py figures     # figures/
 ```
 
-Each stage skips work already on disk. On four cores the feature build takes about 25 minutes and the walk-forward about 20. Inputs go to `data/` and results to `output/`; git ignores both.
+Each stage skips work already on disk. On four cores the feature build takes about 25 minutes and the walk-forward about 20. Inputs go to `data/` and results to `output/`; git ignores both. On the original data files the report prints the figures above, from `design: 543 days, net 52.45 bps/day (NW10 t 3.905)` to `holdout: 1520 days, net 9.3 bps/day (NW10 t 1.578)`. A fresh download differs slightly for the reason given under Limitations.
 
-## Layout
+## Repository layout
 
 | File | Contents |
 |---|---|
@@ -141,7 +157,7 @@ Each stage skips work already on disk. On four cores the feature build takes abo
 | `crypto_xs/models.py` | target, ridge regression, boosted trees and the monthly walk-forward |
 | `crypto_xs/portfolio.py` | momentum neutralization, decile legs, partial trading and cost |
 | `crypto_xs/report.py` | summary statistics and the holdout test |
-| `crypto_xs/plots.py` | README figures |
+| `crypto_xs/plots.py` | README figures, light and dark |
 
 ## References
 
@@ -149,3 +165,7 @@ Each stage skips work already on disk. On four cores the feature build takes abo
 - Bailey, D. H., J. M. Borwein, M. López de Prado and Q. J. Zhu (2017). The probability of backtest overfitting. *Journal of Computational Finance* 20(4), 39-69.
 - Cakici, N., S. J. H. Shahzad, B. Będowska-Sójka and A. Zaremba (2024). Machine learning and the cross-section of cryptocurrency returns. *International Review of Financial Analysis* 94.
 - Newey, W. K. and K. D. West (1987). A simple, positive semi-definite, heteroskedasticity and autocorrelation consistent covariance matrix. *Econometrica* 55(3), 703-708.
+
+## Scope
+
+The repository documents a research measurement of whether a daily cross-sectional book's edge survived a sealed holdout. Nothing in it is investment advice or a recommendation to trade anything described here. The code is released under the MIT License.
